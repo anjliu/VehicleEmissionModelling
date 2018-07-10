@@ -1,7 +1,7 @@
 This repository contains results and models for the project:
 
 ## Estimation of Greenhouse Gas Emissions (GHG) Using Big Traffic Data for Sustainable Traffic Control and Management
-A joint effort between Miovision, ODX, and the Universit of Waterloo
+A joint effort between Miovision, ODX, and the University of Waterloo
 
 To run all of the processes in this repository, addition data files are required. Due to Github's file size constraints, these files are shared at
 https://www.dropbox.com/sh/y3vz8w00syzrmnj/AADUDsC1_1hr38RlKjGAsOWSa?dl=0
