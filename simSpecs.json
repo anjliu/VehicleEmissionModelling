@@ -1,0 +1,90 @@
+{
+"warmUpTime":2320,
+"timeInterval":120,
+"durationOfInterest":140,
+"county":36029,
+"zone":360290,
+"roadType":5,
+"segments":
+	{
+	"DunbarBishop":
+		{
+		"links":
+			{
+			"upstream":
+				{
+				"thru":[10182],
+				"LT":[10186],
+				"RT":[10179]
+				},
+			"downstream":
+				{
+				"thru":[10167],
+				"LT":[10168],
+				"RT":[10166]
+				},
+			"main":
+				{
+				"thru":[34,10171,30],
+				"LT":[10019,31]
+				}
+			},
+		"detectors":
+			{
+			"upstream":[149,150,151],
+			"advance":[108,15,110],
+			"stopbar":[106,109,14]
+			},
+		"SC":3,
+		"SG":
+			{
+			"thru":2
+			},
+		"TravelTimeNB":10
+		},
+	"BishopSheldon":
+		{
+		"links":
+			{
+			"upstream":
+				{
+				"thru":[10182],
+				"LT":[10186],
+				"RT":[10179]
+				},
+			"downstream":
+				{
+				"thru":[10167],
+				"LT":[10168],
+				"RT":[10166]
+				},
+			"main":
+				{
+				"thru":[34,10171,30],
+				"LT":[10019,31]
+				}
+			},
+		"detectors":
+			{
+			"upstream":[142,141,140],
+			"advance":[108,15,110],
+			"stopbar":[106,109,14]
+			}
+		}
+	},
+"LTlaneConnections":
+	{
+	"DunbarBishop":
+		{
+		"fromLane":30,
+		"at":188.622
+		}
+	},
+"#Comments":
+	[
+	"seglinks specifies the links in the Vissim model",
+	"key: first digit is road segment, second digit is movement i.e. thru, left, right",
+	"list is the corresponding link numbers",
+	"detectors are ordered from left to right in terms of approach direction"
+	]
+}
