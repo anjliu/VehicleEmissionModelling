@@ -1,0 +1,2 @@
+monthID	zoneID	hourID	temperature	relHumidity
+6	360290	8	48	66
