@@ -1,13 +1,17 @@
 {
-"figL1":16,
-"figW1":8,
-"figL2":10,
-"figW2":5,
+"figL1":10,
+"figW1":5,
+"figL2":16,
+"figW2":8,
+"figL3":20,
+"figW3":10,
+"figL4":200,
+"figW4":10,
 "fontsize":
 	{
 	"main":24,
-	"sub":20
-	}
+	"sub":20,
+	"tick":10}
 }
 	
 	

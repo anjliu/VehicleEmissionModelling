@@ -12,7 +12,6 @@ import numpy as np
 
 from toolSpace import startFig, getLengthMap
 
-#manual inputs
 lanes=1
 
 plt.style.use('seaborn-whitegrid')
@@ -65,7 +64,6 @@ for sd in simDet:
     x[sd]=int(merDetail.loc[merDetail[3]==simDet[sd][0],9].iloc[0])
 x['end']=x['stop']+40 #add on intersection width
 lengthMap=getLengthMap(mainthrulinks)
-print(pd.Series(mainthrulinks))
 posOffset=sum(lengthMap.loc[pd.Series(mainthrulinks).iloc[0:-1]])
 for sd in x:
     x[sd]=x[sd]+posOffset
@@ -124,13 +122,13 @@ tgreen=lsa.loc[lsa['newState'].str.contains('green'),'tsim']
 
 #plot simDetector data
 ps=json.load(open('plotSpecs.json'))
-f=startFig('Trajectory Reconstruction','Time [s]','Position [m]',1)
+f=startFig('Trajectory Reconstruction','Time [s]','Position [m]',2)
 
 #plot simdetection
 for n in range(len(vehn)):
     pltx=[t1[n],t2[n]]
     plty=[dpos[n]]*2
-    detplt=plt.plot(pltx,plty,linewidth='4',color='orange')
+    detplt=plt.plot(pltx,plty,linewidth='4',color='0.2')
 #connect detections by vehicle
 for n in vehicles:
     detTrajn=detTraj.loc[detTraj['vehn']==n]
@@ -149,7 +147,7 @@ for n in vehicles:
 #plot signal phasing
 for i in redindex:
     if i+1 < len(lsa):
-        sigplt=plt.plot([lsa.loc[i,'tsim'],lsa.loc[i+1,'tsim']],[x['stop']+2]*2,alpha=.9,linewidth=6,color='r')
+        sigplt=plt.plot([lsa.loc[i,'tsim'],lsa.loc[i+1,'tsim']],[x['stop']+2]*2,alpha=.9,linewidth=6,color='0.4')
         
 #%% compose inputs for lead vehicle trajectories
 
@@ -166,12 +164,13 @@ tadv=detTrajAdv.loc[detTrajAdv['vehn'].isin(leadvehns)]['t1'] #time when lead ve
 detTrajEnd=detTraj.loc[detTraj['x']==x['end']]
 
 #inputs for deceleration/acceleration curve construction
-ttcruise=np.percentile(rsr['Trav'],0) #nth percentile travel time to find cruise speed
+ttcruise=np.percentile(rsr['Trav'],5) #nth percentile travel time to find cruise speed
 #TODO: length of segment
 v0=521.75/ttcruise #starting speed
-dt=.2 #time step [s]
+dt=.5 #time step [s]
 tdelta=9999
 p=.1 #parameter adjustment step for search
+lag=2 # time between vehicle detection at stopbar and vehicle coming to a complete stop
 
 #%% trajectory of lead vehicles
 leadTraj={}
@@ -199,7 +198,7 @@ for i in range(len(leadvehns)): #for each lead vehicle
             tdec.append(tdec[-1]+dt)
             
         #shift deceleration trajectory to match end with beginning of stopped trajectory
-        tdeci=tdec+leadvehs['t1'].iloc[i]-tdec[-1]
+        tdeci=tdec+leadvehs['t1'].iloc[i]-tdec[-1]+lag
         xdeci=xdec+leadvehs['x'].iloc[i]-xdec[-1]
         tcruise=(xdeci[0]-x['adv'])/v[0]
         textra=tdeci[0]-tcruise #extrapolated time of reaching advance detector
@@ -207,13 +206,16 @@ for i in range(len(leadvehns)): #for each lead vehicle
         if xdeci[0]<x['adv']:
             tdelta=tadv.iloc[i]-tdeci[abs(xdeci-x['adv']).argmin()]
         if tdelta>0:
+            print('flatten')
             k3=k3-k3o*p 
             k4=k4+k4o*p
             k5=k5+k5o*p
         else:
+            print('sharpen')
             k3=k3+k3o*p 
             k4=k4-k4o*p
             k5=k5-k5o*p
+#        plt.plot(tdeci,xdeci)
             
     #stopped curve
     tStopEnd=detTrajStop.loc[detTrajStop['vehn']==leadvehns[i],'t2'].iloc[0]
@@ -428,7 +430,7 @@ for i in vehicles:
 #%%
 
 #plt.legend((sigplt[0],detplt[0]),('Red Signal Phase','Simulated Detector Data'))
-plt.legend((sigplt[0],detplt[0],trajplt[0],simplt[0]),('Red Signal Phase','Simulated Detector Data','Reconstructed Trajectory','Simulated Trajectories'))
+plt.legend((sigplt[0],detplt[0],trajplt[0],simplt[0]),('Red Signal Phase','Simulated Detector Data','Reconstructed Trajectory','Simulated Trajectories'),prop={'size': 17})
 
 #%% misc. settings
 plt.gca().set_ylim(420,540)

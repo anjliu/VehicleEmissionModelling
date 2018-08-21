@@ -169,7 +169,7 @@ detTrajEnd=detTraj.loc[detTraj['x']==x['end']]
 ttcruise=np.percentile(rsr['Trav'],0) #nth percentile travel time to find cruise speed
 #TODO: length of segment
 v0=521.75/ttcruise #starting speed
-dt=.2 #time step [s]
+dt=.5 #time step [s]
 tdelta=9999
 p=.1 #parameter adjustment step for search
 

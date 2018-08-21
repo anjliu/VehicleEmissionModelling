@@ -33,7 +33,7 @@ runSpecs=json.load(open('runSpecs.json'))
 periods=runSpecs['periods']
 
 # get model specs
-modelSpecs=json.load(open('modelSpecs.json'))
+modelSpecs=json.load(open('modelSpecs-MajorOnly.json')) # approach segments to major intersections excluding minor intersections
 
 # specs for MOVES
 county=runSpecs['county']

@@ -18,12 +18,17 @@ simSpecs=json.load(open('simSpecs.json'))
 
 seglinks=simSpecs['segments'][segment]['links'] #IDs of links in Vissim model categorized by appproach and movement
 ltLanes=simSpecs['LTlaneConnections'] #links and positions where left-turn lanes connect
-wt=simSpecs['warmUpTime'] #warm-up time: time at beginning of simulation to exclude [s]
-pt=simSpecs['durationOfInterest'] #period to plot or analyse
+#wt=simSpecs['warmUpTime'] #warm-up time: time at beginning of simulation to exclude [s]
+#pt=simSpecs['durationOfInterest'] #period to plot or analyse
+
+# alternate wt and pt
+wt=2000
+pt=400
+
 
 #file path of Vissim outputs
-visOutputPath='C:/Users/anjie/OneDrive - University of Waterloo/MASc Research/VISSIMmodel/WholeCorridor/SimOutputs-wDataCollectionPoints/Hespeler--Dunbar-Hwy401_AllVehTypes_wDataCollectionPoints_001'
-fzpPath=visOutputPath +'.fzp'
+visOutputPath='VissimOutputs/'
+fzpPath=visOutputPath +'*.fzp'
 
 #Load vehicle records to dataframe
 fzp=pd.read_csv(fzpPath,sep=';',skiprows=range(0,22),
@@ -45,8 +50,7 @@ fzp=fzp.loc[fzp['lane']==3] #filter to lane
 #fzp=fzp.loc[fzp['vehType']==200] #filter by vehicle type
 
 #remove vehicle records from warm-up period and period after plot duration
-fzp=fzp.loc[fzp['sec']>wt]
-fzp=fzp.loc[fzp['sec']<wt+pt]
+fzp=fzp.loc[(fzp['sec']>wt)&(fzp['sec']<wt+pt)]
 
 #import link lengths
 linkProperties=pd.read_excel('LinkProperties.xlsx',header=1)
@@ -90,7 +94,10 @@ for i in vehicles:
 plt.savefig('Vehicle Trajectories of ' +segment+ '.pdf')
 
 #%% misc. settings
-plt.gca().set_ylim(420,540)
-plt.gca().set_xlim(2320,2440)
+# limit to window of interest
+#plt.gca().set_ylim(420,540)
+#plt.gca().set_xlim(2320,2440)
+
+
 #leadtraj=fzp.loc[fzp['no']==4633]
 #leadtraj.to_csv('C:/Users/Anjie/OneDrive - University of Waterloo/MASc Research/EmissionModelling/LeadTrajectory.csv',sep=',',index=False)

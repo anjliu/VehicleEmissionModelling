@@ -34,7 +34,7 @@ for file in os.listdir(ldecpath):
 ldigit=pd.read_csv('linkDigits.csv',index_col='digit').iloc[:,0]
 
 # file paths
-movesInputPath='MOVESinputs/all-oneSim/'
+movesInputPath='MOVESinputs/all/'
 savepath='ForTableau/'
 
 mo_ft=pd.DataFrame()

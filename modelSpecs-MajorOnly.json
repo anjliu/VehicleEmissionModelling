@@ -3,7 +3,8 @@
 	[
 	"detectors are ordered from left to right in terms of approach direction",
 	"approaches extend from the previous intersection",
-	"approach links are ordered in the direction of traffic flow"
+	"approach links are ordered in the direction of traffic flow",
+	"Hwy401 not included because there were no end-of-intersection detectors"
 	],
 "Dunbar":
 	{
@@ -20,7 +21,7 @@
 				},
 			"approach":
 				{
-				"thru":[32,10175,36],
+				"thru":[36],
 				"LT":[10022,37]
 				}
 			},
@@ -31,7 +32,7 @@
 			},
 		"detectors":
 			{
-			"upstream":[145,144,143],
+			"end":[148,147,146],
 			"advance":[11,12,13],
 			"stopbar":[122,123,124]
 			},
@@ -54,7 +55,7 @@
 				},
 			"approach":
 				{
-				"thru":[34,10171,30],
+				"thru":[30],
 				"LT":[10019,31]
 				}
 			},
@@ -65,7 +66,7 @@
 			},
 		"detectors":
 			{
-			"upstream":[149,150,151],
+			"end":[142,141,140],
 			"advance":[108,15,110],
 			"stopbar":[106,109,14]
 			},
@@ -84,7 +85,7 @@
 				},
 			"approach":
 				{
-				"thru":[24,10149,28],
+				"thru":[28],
 				"LT":[10018,29]
 				}
 			},
@@ -95,7 +96,7 @@
 			},
 		"detectors":
 			{
-			"upstream":[152,153,154],
+			"end":[145,144,143],
 			"advance":[114,115,116],
 			"stopbar":[22,21,20]
 			},
@@ -118,7 +119,7 @@
 				},
 			"approach":
 				{
-				"thru":[26,10155,22],
+				"thru":[22],
 				"LT":[10015,23]
 				}
 			},
@@ -129,7 +130,7 @@
 			},
 		"detectors":
 			{
-			"upstream":[142,141,140],
+			"end":[158,159,160],
 			"advance":[91,28,29],
 			"stopbar":[92,93,94]
 			},
@@ -148,7 +149,7 @@
 				},
 			"approach":
 				{
-				"thru":[12,10010,16,10014,20],
+				"thru":[20],
 				"LT":[10012,21]
 				}
 			},
@@ -159,7 +160,7 @@
 			},
 		"detectors":
 			{
-			"upstream":[155,156,157],
+			"end":[152,153,154],
 			"advance":[103,36,35],
 			"stopbar":[101,104,105]
 			},
@@ -182,7 +183,7 @@
 				},
 			"approach":
 				{
-				"thru":[18,10013,14,10007,9,10110,71],
+				"thru":[9,10110,71],
 				"LT":[11,10005]
 				}
 			},
@@ -193,7 +194,7 @@
 			},
 		"detectors":
 			{
-			"upstream":[158,159,160],
+			"end":[163,164,165,166],
 			"advance":[43,71,72,42],
 			"stopbar":[70,40,41,73]
 			},
@@ -223,7 +224,7 @@
 			},
 		"detectors":
 			{
-			"upstream":[161,162],
+			"end":[155,156,157],
 			"advance":[87,54,53],
 			"stopbar":[55,86,85]
 			},
