@@ -11,23 +11,29 @@ import json, os
 import matplotlib.pyplot as plt
 from time import time
 
-import toolSpace as ts
+import toolSpace as ts 
 
-start_t=time()
+start_t=time() 
 
-##temp
-#inters=['Hwy401']
-#direcs=['NB']
+# manual inputs
+scenario='advDetector25m'
+advpos=2 # position number of advance detector [2:25m, 3:50m, 4:75m, 5:100m]
+majorOnly=True
+realPeriods=True
 
-# manual input
-outpath='MOVESinputs/ReconstructedTrajectories-wIdle/'
-#outpath='testing/'
+#%%
+
+# file directories
+outpath='MOVESinputs/'+scenario+'/'
+figoutpath='TrajectoryReconstructionPlots/'+scenario
+if not os.path.exists(figoutpath):
+    os.makedirs(figoutpath)
 
 # intersections, directions
 inters=['Dunbar','Bishop','Sheldon','Pinebush','Hwy401']
 direcs=['NB','SB']
 
-#import simulation data
+# list files for simulation data
 lsas=ts.listFiles('lsa')
 mers=ts.listFiles('mer')
 rsrs=ts.listFiles('rsr')
@@ -35,30 +41,40 @@ fzps=ts.listFiles('fzp')
 
 # runSpecs
 runSpecs=json.load(open('runSpecs.json'))
-periods=runSpecs['periods']
+periods=json.load(open('periods-variations.json'))
+if realPeriods:
+    periods=json.load(open('periods-real.json'))
 
 # modelSpecs
-modelSpecs=json.load(open('modelSpecs-MajorOnly.json'))
+modelSpecs=json.load(open('modelSpecs.json'))
+if majorOnly:
+    modelSpecs=json.load(open('modelSpecs-MajorOnly.json'))
+
 
 #%% parameters for trajectory reconstruction
-cruisepercentile=85
+cruisepercentile=80
 dt=1 # time step [s]
 adj=.1 # parameter adjustment step for curve fitting
-stoplag=1 # time between vehicle detection at stopbar and vehicle coming to a complete stop
-startlag=1 # time between vehicle starting to accelerate and vehicle no longer being detected at stopped position
-stoptime=1 # minimum time of detection for a vehicle that stopped at the detector position
-t_tol=2 # acceptable difference between detected time and fitted curve time at the advance position
+stoplag=1.5 # time between vehicle detection at stopbar and vehicle coming to a complete stop
+startlag=2 # time between vehicle starting to accelerate and vehicle no longer being detected at stopped position
+stoptime=2 # minimum time of detection for a vehicle that stopped at the detector position
+pstopcruise=.5 # if a vehicle fully stops, its average speed is at most this fraction of the cruise speed
+
+t_tol=1 # acceptable difference between detected time and fitted curve time at the advance position
+dec_max=-10 # maximum deceleration [m/s^2]
+max_iter=10 # maximum iterations for curve fitting
+max_accel_dist=100 # maximum distance for building acceleration curve [m]
+max_decel_dist=300 # maximum distance for building deceleration curve [m]
 # original deceleration curve parameters from literature
 k3o=0.005 
 k4o=0.154
 k5o=0.493
 # acceleration curve parameters from literature
-beta0=3.369
-beta1=0.072
+beta0o=3.369
+beta1o=0.072
 # car-following parameters: time interval and effective vehicle length
 leffs=pd.Series([5.5,13,11.5,13.5],index=[100,150,200,210]) # effective length [m]
-hDis=1.5 # maximum headway for queue discharge
-pstopcruise=.5 # if a vehicle fully stops, its average speed is at most this fraction of the cruise speed
+hDis=2 # maximum headway for queue discharge
 
 #%% for generating MOVES inputs
 
@@ -83,7 +99,7 @@ zone=runSpecs['zone']
 roadType=runSpecs['roadType']
 hourDayID=runSpecs['hourDayID']
 
-opmFormat=runSpecs['opModeFormat']
+opmFormat=json.load(open('opModeFormat.json'))
 opmModeSetProcesses=opmFormat['processes']['modeSet']
 opmAllRunningProcesses=opmFormat['processes']['allRunning']
 opmModeSet=opmFormat['opModeSets']['modeSet']
@@ -110,9 +126,17 @@ for s in range(len(lsas)): # for each simulation
     merEn=mer.loc[mer['t(Entry)']>0] # divide detector data into dectector on and detector off data
     merEx=mer.loc[mer['t(Exit)']>0]
     tg=lsa.loc[lsa['newState'].str.contains('green')] # filter signal timing to green times
+    
+    detn_all=merDetail[3]
+    merDetail['intersection']=detn_all/1000
+    merDetail['direction']=detn_all%1000/100
+    merDetail['lane']=detn_all%100/10
+    merDetail['position']=detn_all%10
+    
+    merDetail=merDetail.astype({'intersection':int,'direction':int,'lane':int,'position':int})
 
     for p in periods: # for each period (hour)
-        print('Starting '+p)
+#        print('Starting '+p)
         rsrp=ts.filterbyperiod(rsr,p)
         fzpp=ts.filterbyperiod(fzp,p)
         
@@ -130,9 +154,10 @@ for s in range(len(lsas)): # for each simulation
         opm_mode=[]
         opm_fraction=[]
         
-        inter_index=1 # for naming linkID
+        inter_index=1 # intersection index (for link ID, detector identification)
         for i in inters: # for each intersection
             tgi=tg.loc[tg['SC']==modelSpecs[i]['SignalController']] # filter to signal controller
+            merDetail_i=merDetail.loc[merDetail['intersection']==inter_index] # filter to intersection
             
             direc_index=1
             for d in direcs: # for each direction
@@ -140,7 +165,9 @@ for s in range(len(lsas)): # for each simulation
                 # Dunbar northbound and Hwy401 southbound are out of scope (end intersections)
                 if not ((i=='Dunbar' and d=='NB') or (i=='Hwy401' and d=='SB')):
                     time_id0=time()
-                    print('Starting next segment')
+#                    print('Starting next segment')
+                    
+                    merDetail_id=merDetail_i.loc[merDetail_i['direction']==direc_index] # filter to direction
                     
                     f=ts.startFig('Lead Trajectories of '+str(p)+str(i)+str(d),'Time','Position',4)
                     
@@ -185,31 +212,27 @@ for s in range(len(lsas)): # for each simulation
                     
                     rsrpid=rsrp.loc[rsrp['No.']==segSpecs['TravelTimeMeas']] # filter travel time measurements 
                     
-#                    # get cruising speed from travel times
-#                    ttcruise=np.percentile(rsrpid['Trav'],5) # use 5th percentile of travel times
-#                    segLength=sum(lengthMap) # length of segment
-#                    v0=segLength/ttcruise               
-#                    print('Cruise speed: %.1f' %v0)
-
                     # get detector numbers
-                    detn={}
-                    segDetSpecs=segSpecs['detectors']
-                    detn['adv']=segDetSpecs['advance']
-                    detn['stop']=segDetSpecs['stopbar']
+                    detn={}                
+                    lanes=max(merDetail_id['lane'])
+                    detn_start=inter_index*1000+direc_index*100
+                    detn['adv']=list(detn_start+advpos+pd.Series(range(1,lanes+1))*10)
+                    detn['stop']=list(detn_start+1+pd.Series(range(1,lanes+1))*10)
+                    detn['end']=list(detn_start+pd.Series(range(1,lanes+1))*10)
                     
                     xdet={} # get positions of detectors
-                    for sd in detn:
-                        xdet[sd]=int(merDetail.loc[merDetail[3]==detn[sd][0],9].iloc[0])
+                    for det in detn:
+                        xdet[det]=int(merDetail.loc[merDetail[3]==detn[det][0],9].iloc[0])
                     # for stopbar detector
                     posOffset=sum(lengthMap.loc[pd.Series(approachlinks).iloc[0:-1]]) # offset distance is length of upstream links
                     xdet['stop']=xdet['stop']+posOffset
                     # for advance detector
-                    detlink=merDetail.loc[merDetail[3]==detn['adv'][0],5].iloc[0] # link detector is on
+                    detlink=merDetail.loc[merDetail[3]==detn['adv'][1],5].iloc[0] # link detector is on
                     detlinkindex=links.index(detlink)
                     posOffset=sum(lengthMap.loc[pd.Series(approachlinks).iloc[0:detlinkindex]]) # offset distance is length of upstream links up to link of detector
                     xdet['adv']=xdet['adv']+posOffset
                     # end of intersection
-                    xdet['end']=xdet['stop']+float(lengthMap[intlink]) #add on intersection span
+                    xdet['end']=xdet['stop']+float(lengthMap[intlink]+2) #add on intersection span
 
                     # get cruising speed
                     merExid_stop=merEx.loc[merEx['Measurem.'].isin(detn['stop'])] # stopbar exit detections
@@ -234,13 +257,14 @@ for s in range(len(lsas)): # for each simulation
                     cycles=range(len(tgidp)-1) # the added on green start is not counted - just for closing the bin               
                     
                     for c in cycles:
+#                        print('Processing '+str(p)+' '+i+' '+d+' cycle '+str(c))
                         cyclevehn=[]
                         link=[]
                         speed=[]
                         accel=[]
                         vehtype=[]
                         
-                        lanes=len(detn['stop'])
+#                        lanes=len(detn['stop'])
                         for l in range(lanes):
                             
                             detectorStop=detn['stop'][l]
@@ -248,11 +272,17 @@ for s in range(len(lsas)): # for each simulation
                             # find vehicles detected in this lane during this cycle at the stopbar
                             merExid_stopbar=merEx.loc[merEx['Measurem.']==detectorStop]
                             merExid_stopbar_cycle=merExid_stopbar.loc[(merExid_stopbar['t(Exit)']>=tgidp[c])&(merExid_stopbar['t(Exit)']<=tgidp[c+1])]
-                            vehicles=merExid_stopbar_cycle['VehNo'].unique()
+                            vehicles_cycle=merExid_stopbar_cycle['VehNo'].unique()
+                            # find vehicles that went thru end of intersection
+                            merExid_end=merEx.loc[merEx['Measurem.'].isin(detn['end'])]
+                            vehicles_thru=merExid_end['VehNo'].unique()
+                            
+                            # vehicles in this lane and going thru
+                            vehicles=np.intersect1d(vehicles_cycle,vehicles_thru)
                             
                             if len(vehicles)>0:
                             
-                                # filter detections to vehicles 
+                                # filter detections of thru vehicles of this cycle in this lane
                                 # (so that adv detections before the cycle starts are included as long as the vehicle passes the stopbar during the cycle.)
                                 merEnc=merEn.loc[merEn['VehNo'].isin(vehicles)]
                                 merExc=merEx.loc[merEx['VehNo'].isin(vehicles)]
@@ -264,8 +294,8 @@ for s in range(len(lsas)): # for each simulation
                                 detectionAdvEn=merEnc.loc[merEnc['Measurem.'].isin(detn['adv'])]
                                 detectionAdvEx=merExc.loc[merExc['Measurem.'].isin(detn['adv'])]
                                 # data for end of intersection detection of all lanes
-#                                detectionEndEn=merEnc.loc[merEnc['Measurem.'].isin(detn['end'])]
-#                                detectionEndEx=merExc.loc[merExc['Measurem.'].isin(detn['end'])]
+                                detectionEndEn=merEnc.loc[merEnc['Measurem.'].isin(detn['end'])]
+                                detectionEndEx=merExc.loc[merExc['Measurem.'].isin(detn['end'])]
                                 
                                 # compose detector data to combine entry and exit times into one data entry for each vehicle
                                 stopt1=[]
@@ -284,16 +314,21 @@ for s in range(len(lsas)): # for each simulation
                                     stopt2n=detectionStopEx.loc[detectionStopEx['VehNo']==n,'t(Exit)'].iloc[0]
                                     advt1n=detectionAdvEn.loc[detectionAdvEn['VehNo']==n,'t(Entry)'].iloc[0]
                                     advt2n=detectionAdvEx.loc[detectionAdvEx['VehNo']==n,'t(Exit)'].iloc[0]
+                                    endt1n=detectionEndEn.loc[detectionEndEn['VehNo']==n,'t(Entry)'].iloc[0]
+                                    endt2n=detectionEndEx.loc[detectionEndEx['VehNo']==n,'t(Exit)'].iloc[0]
                                     stopt1.append(stopt1n)
                                     stopt2.append(stopt2n)
                                     advt1.append(advt1n)
                                     advt2.append(advt2n)
+                                    endt1.append(endt1n)
+                                    endt2.append(endt2n)
+
                                     plt.plot([stopt1n,stopt2n],[xdet['stop']]*2,'orange')
                                     plt.plot([advt1n,advt2n],[xdet['adv']]*2,'orange')
-                                    
+                                    plt.plot([endt1n,endt2n],[xdet['end']]*2,'orange')
 
                                 # dataframe of detector data
-                                detection=pd.DataFrame({'vehn':vehn,'advt1':advt1,'advt2':advt2,'stopt1':stopt1,'stopt2':stopt2,'vtype':vtype})
+                                detection=pd.DataFrame({'vehn':vehn,'advt1':advt1,'advt2':advt2,'stopt1':stopt1,'stopt2':stopt2,'endt1':endt1,'endt2':endt2,'vtype':vtype})
 
                                 detection=detection.sort_values(by='stopt1') # sort by time of reaching stopbar
                                 detection=detection.reset_index(drop=True)
@@ -305,7 +340,7 @@ for s in range(len(lsas)): # for each simulation
                                 
                                 # check if there was a queue - how long the first vehicle stopped at the stopbar
                                 if stopbarWait>stoptime: # if the vehicle had stopped, construct deceleration and acceleration curves for the lead vehicle
-                                    
+#                                    print('lead vehicle stopped')
                                     followcheck=True
                                     
                                     tdelta=9999 # time difference for fitting curve to detector data (to be minimized)
@@ -316,69 +351,97 @@ for s in range(len(lsas)): # for each simulation
                                     k3=k3o
                                     k4=k4o
                                     k5=k5o
-                                    while tdelta>t_tol: # time difference between advance detection and extrapolated cruise trajectory at advance
-                                        v=[v0] # speed profile
-                                        dc=[0] # deceleration profile
+                                    itercount=0
+                                    while abs(tdelta)>t_tol and itercount<max_iter: # time difference between advance detection and extrapolated cruise trajectory at advance
+                                        vdec=[v0] # speed profile
+                                        adec=[0] # deceleration profile
                                         xdec=[0] # positions 
                                         tdec=[0] # time
-                                        while v[-1]>0: # until speed has reached zero,
-                                            dc.append(-k3*v[-1]**2+k4*v[-1]+k5) # using deceleration curve from literature
-                                            v.append(v[-1]-(dc[-1]+dc[-2])/2*dt) # get speed for each time step
-                                            xdec.append(xdec[-1]+v[-1]*dt+(dc[-1]+dc[-2])/4*dt**2) # append to positions
+                                        while vdec[-1]>0 and xdec[-1]<max_decel_dist: # until speed has reached zero 
+                                            dec_rate=-k3*vdec[-1]**2+k4*vdec[-1]+k5
+                                            if dec_rate<dec_max:
+                                                dec_rate=dec_max
+                                            adec.append(dec_rate) # using deceleration curve from literature
+                                            vdec.append(vdec[-1]-(adec[-1]+adec[-2])/2*dt) # get speed for each time step
+                                            xdec.append(xdec[-1]+(vdec[-1]+vdec[-2])/2*dt+(adec[-1]+adec[-2])/4*dt**2) # append to positions
                                             tdec.append(tdec[-1]+dt) # append to times
                                 
                                         # shift deceleration trajectory to match end of deceleration with beginning of stopped trajectory
                                         tdeci=pd.Series(tdec)+leaddetection['stopt1']-tdec[-1]+stoplag
                                         xdeci=pd.Series(xdec)+xdet['stop']-xdec[-1]
-                                        tcruise=(xdeci[0]-xdet['adv'])/v[0] # time spent cruising after advance detection before deceleration
-                                        textra=tdeci[0]-tcruise # extrapolated time of reaching advance detector from beginning of deceleration
-                                        tdelta=leaddetection['advt1']-textra # difference between advance detection time and extrapolated time
-                                        if xdeci[0]<xdet['adv']: # if deceleration started before advance detection
-                                            tdelta=leaddetection['advt1']-tdeci[abs(xdeci-xdet['adv']).idxmin()]
-                                        if tdelta>0: # if curve is earlier than detection
+                                        tdelta=leaddetection['advt1']-tdeci[abs(xdeci-xdet['adv']).idxmin()]
+                                        if xdeci[0]<xdet['adv']: # if deceleration started after advance detection
+                                            tcruise=(xdeci[0]-xdet['adv'])/vdec[0] # time spent cruising after advance detection before deceleration
+                                            textra=tdeci[0]-tcruise # extrapolated time of reaching advance detector from beginning of deceleration
+                                            tdelta=leaddetection['advt1']-textra # difference between advance detection time and extrapolated time
+                                        if tdelta>0: # if curve is earlier than detection, decelerate faster
+                                            dec_change='faster'
                                             k3=k3-k3o*adj 
                                             k4=k4+k4o*adj
                                             k5=k5+k5o*adj
-                                        else: # if curve is later than detection
-                                            print('decelerate slower')
+                                        else: # if curve is later than detection, decelerate slower
+                                            dec_change='slower'
                                             k3=k3+k3o*adj 
                                             k4=k4-k4o*adj
                                             k5=k5-k5o*adj
-                                    
-                                    vdec=v
-                                    adec=dc
+                                        
+                                        itercount+=1
+#                                        print('itercount='+str(itercount)+', decelerated '+dec_change)
                                     
                                     # stopped curve
                                     tStopEnd=leaddetection['stopt2']
                                     
                                     # acceleration curve
-                                    v=[0] # start at zero speed
                                     tdelta=9999 # to be minimized
-                                    a=[0] # acceleration starts at 0
                                     
-                                    xacc=[0]
-                                    tacc=[0]
-                                    while v[-1]<v0:
-                                        a.append(beta0-beta1*v[-1])
-                                        v.append(v[-1]+(a[-1]+a[-2])/2*dt)
-                                        xacc.append(xacc[-1]+v[-1]*dt+(dc[-1]+dc[-2])/4*dt**2)
-                                        tacc.append(tacc[-1]+dt)
+                                    # start with original values
+                                    beta0=beta0o
+                                    beta1=beta1o
                                     
-                                    # shift acceleration curve to start at the end of the stopped curve
-                                    tacc+=tStopEnd-startlag
-                                    xacc=[xx+xdet['stop'] for xx in xacc]
-                                    aacc=a
-                                    vacc=v
-                                    
+                                    itercount=0
+                                    while abs(tdelta)>t_tol and itercount<max_iter:
+                                        #initial values at the beginning of the curve
+                                        vacc=[0]
+                                        aacc=[0]
+                                        xacc=[0]
+                                        tacc=[0]
+                                        
+                                        while vacc[-1]<v0 and xacc[-1]<max_accel_dist:
+                                            aacc.append(beta0-beta1*vacc[-1]) # acceleration function from literature
+                                            vacc.append(vacc[-1]+(aacc[-1]+aacc[-2])/2*dt)
+                                            xacc.append(xacc[-1]+(vacc[-1]+vacc[-2])/2*dt+(aacc[-1]+aacc[-2])/4*dt**2)
+                                            tacc.append(tacc[-1]+dt)
+                                                                                      
+                                        # shift acceleration curve to start at the end of the stopped curve
+                                        tacci=pd.Series(tacc)+tStopEnd-startlag
+                                        xacci=pd.Series(xacc)+xdet['stop']
+
+                                        tdelta=leaddetection['endt2']-tacci[abs(pd.Series(xacci)-xdet['end']).idxmin()] # shortest distance between acceleration curve and end detection
+                                        if xacci.iloc[-1]>xdet['end']: # if acceleration ended after end detection
+                                            tcruise=(xdet['end']-xacci.iloc[-1])/vacc[-1] # time spent cruising after acceleration before reaching end detector
+                                            textra=tacci.iloc[-1]+tcruise # extrapolated time of reaching end detector from end of acceleration
+                                            tdelta=leaddetection['endt2']-textra # difference between end detection time and extrapolated time
+                                        if tdelta>0: # if curve is earlier than detection, accelerate slower
+                                            beta0-=beta0o*adj
+                                            beta1+=beta1o*adj
+
+                                        else: # if curve is later than detection, accelerate faster
+                                            beta0+=beta0o*adj
+                                            beta1-=beta1o*adj
+                                        
+                                        itercount+=1
+#                                        print('itercount='+str(itercount))
+                                        
+                                        
                                     # points for idle trajectory
                                     v_idle=[0]*int(stopbarWait)
                                     a_idle=[0]*int(stopbarWait)
                                     
                                     # compile curves into lead trajectory
-                                    leadTraj['t']=list(tdeci)+list(tacc)
-                                    leadTraj['x']=list(xdeci)+list(xacc)
-                                    leadTraj['a']=list(adec)+list(aacc)+v_idle
-                                    leadTraj['v']=list(vdec)+list(vacc)+a_idle
+                                    leadTraj['t']=list(tdeci)+list(tacci)
+                                    leadTraj['x']=list(xdeci)+list(xacci)
+                                    leadTraj['a']=list(adec)+v_idle+list(aacc)
+                                    leadTraj['v']=list(vdec)+a_idle+list(vacc)
                                     leadTraj['vehn']=detection.loc[0,'vehn']
                                     leadTraj['vtype']=detection.loc[0,'vtype']
                                     
@@ -406,6 +469,7 @@ for s in range(len(lsas)): # for each simulation
                                         if followcheck:
                                         
                                             if vapproach<pstopcruise*v0: #check if vehicle stopped in queue
+#                                                print('vehicle stopped in queue')
                                                 # offset end of stopped curve of preceding vehicle to get end of stopped curve for current following vehicle
                                                 tgo+=tlag
                                                 xstop-=leff
@@ -414,43 +478,30 @@ for s in range(len(lsas)): # for each simulation
                                                 # shift deceleration curve temporally
                                                 if xdeci[0]>xdet['adv']: # if deceleration curve starts after the advance location
                                                     tdeci=pd.Series(tdec).add(detection.loc[j,'advt1']+(xdeci[0]-xdet['adv'])/v0) # match extrapolated upstream position to advance detector
-    #                                                tdeci=pd.Series(detection.loc[j,'advt1']).append(tdeci)
-    #                                                xdeci=pd.Series(xdet['adv']).append(xdeci)
                                                 else: # if deceleration curve starts before the advance location
                                                     tdelta=tdec[abs(np.array(xdeci-xdet['adv'])).argmin()]-tdec[0] # find the point closest to the advance detector
                                                     tdeci=pd.Series(tdec).add(detection.loc[j,'advt1']-tdelta) # shift deceleration curve to match this point to advance detector
                                                 
                                                 #acceleration curve
-                                                v=[0] # speed vector
-                                                a=[0] # acceleration vector
-                                              
-                                                xacc=[0] # position vector
-                                                tacc=[0] # time vector
-                                                tdelta=9999 # to be minimized
-    
-                                                while v[-1]<v0: # until speed reaches cruise speed
-                                                    a.append(beta0-beta1*v[-1]) # accleration of this time step, from literature
-                                                    v.append(v[-1]+(a[-1]+a[-2])/2*dt) # append speed for each time step
-                                                    xacc.append(xacc[-1]+v[-1]*dt+(a[-1]+dc[-2])/4*dt**2) # append to position vector
-                                                    tacc.append(tacc[-1]+dt) # append to time vector
-                                                vacc=v
-                                                aacc=a
-                                                tacc+=tgo-startlag # shift start of acceleration to end of stopped curve, account for start lag
-                                                xacc=[xx+xstop for xx in xacc]
+
+                                                # shift acceleration curve to start at the end of the stopped curve
+                                                tacci=[tt+tgo-startlag for tt in tacc]
+                                                xacci=[xx+xstop for xx in xacc]
                                                 
                                                 # idling 
                                                 t_idle=tgo-tdeci.iloc[-1]
                                                 v_idle=[0]*int(t_idle)
                                                 a_idle=[0]*int(t_idle)
                                                 
-                                                # put together decelerationg and acceleration curves
-                                                traj[j]['t']=list(tdeci)+list(tacc)
-                                                traj[j]['x']=list(xdeci)+list(xacc)
-                                                traj[j]['v']=list(vdec)+list(vacc)+v_idle
-                                                traj[j]['a']=list(adec)+list(aacc)+a_idle
+                                                # put together deceleration and acceleration curves
+                                                traj[j]['t']=list(tdeci)+list(tacci)
+                                                traj[j]['x']=list(xdeci)+list(xacci)
+                                                traj[j]['v']=list(vdec)+v_idle+list(vacc)
+                                                traj[j]['a']=list(adec)+a_idle+list(aacc)
                                                 
                                                                                         
-                                            elif h<hDis: #didn't stop but followed closely
+                                            elif h<hDis: # didn't stop but followed closely
+#                                                print('Vehicle followed closely')
                                                 # values at start of trajectory
                                                 t0=detection.loc[j,'advt1']
                                                 traj[j]={'t':[t0],'x':[xdet['adv']],'a':[0],'v':[v0],'vehn':detection.loc[j,'vehn'],'vtype':detection.loc[j,'vtype']}
@@ -468,6 +519,7 @@ for s in range(len(lsas)): # for each simulation
                                                     traj[j]['a'].append(traj[j]['v'][-1]-traj[j]['v'][-2]) # acceleration as change in speed
                                             
                                             else:
+#                                                print('vehicle in free flow')
                                                 followcheck=False # vehicle are no longer following - go to free flow reconstruction
                                                 # straight trajectories from advance detector to stop detector
                                                 traj[j]={'vehn':detection.loc[j,'vehn'],'vtype':detection.loc[j,'vtype']}
@@ -486,6 +538,7 @@ for s in range(len(lsas)): # for each simulation
                                                                                                    
                                         else: #free flow vehicles
                                             # straight trajectories from advance detector to stop detector
+#                                            print('vehicle in free-flow')
                                             traj[j]={'vehn':detection.loc[j,'vehn'],'vtype':detection.loc[j,'vtype']}
                                             ti=detection.loc[j,'advt2']
                                             tf=detection.loc[j,'stopt2']
@@ -504,6 +557,7 @@ for s in range(len(lsas)): # for each simulation
                                
                                 else: # if first vehicle didn't stop, then trajectory is assumed to be straight from advance to stopbar
                                     # lead trajectory
+#                                    print('lead vehicle didn\'t stop')
                                     ti=detection.loc[0,'advt2']
                                     tf=detection.loc[0,'stopt2']
                                     tflow=tf-ti
@@ -534,6 +588,7 @@ for s in range(len(lsas)): # for each simulation
                                         traj[j]['x']=np.linspace(xi,xf,points)
                                         traj[j]['v']=[vflow]*points
                                         traj[j]['a']=[0]*points
+                                        plt.plot(traj[j]['t'],traj[j]['x'],'g--')
                                 
                                 
                                 
@@ -543,19 +598,32 @@ for s in range(len(lsas)): # for each simulation
                                 
                                 # complete reconstructed trajectories for lane and add to cycle collection
                                 for j in traj:
+#                                    plt.plot(traj[j]['t'],traj[j]['x'],'bo')
+
                                     # filling for before the reconstructed trajectory (constant speed)
                                     xfill=traj[j]['x'][0]
                                     tfill=xfill/v0
                                     fillpoints=int(tfill) # number points, i.e. seconds, to fill in before the trajectory
                                     vfillList1=[v0]*fillpoints # array of speeds to fill in
                                     afillList1=[0]*fillpoints # array of accelerations to fill in 
-
-                                    # filling for after the reconstructed trajectory (constant speed)
-                                    xfill=xdet['end']-traj[j]['x'][-1]
-                                    tfill=xfill/v0
-                                    fillpoints=int(tfill) # number points, i.e. seconds, to fill in before the trajectory
-                                    vfillList2=[v0]*fillpoints # array of speeds to fill in
-                                    afillList2=[0]*fillpoints # array of accelerations to fill in 
+                                    
+                                    # after the acceleration, check if there's a gap or overshoot
+                                    gap=xdet['end']-traj[j]['x'][-1]                          
+                                    if gap>0:
+                                        # filling for after the reconstructed trajectory (constant speed)
+                                        xfill=gap
+                                        tfill=xfill/v0
+                                        fillpoints=int(tfill) # number points, i.e. seconds, to fill in before the trajectory
+                                        vfillList2=[v0]*fillpoints # array of speeds to fill in
+                                        afillList2=[0]*fillpoints # array of accelerations to fill in
+                                    else:
+                                        
+                                        # remove acceleration curve after end of intersection
+                                        acc_remove=len(np.where(np.array(traj[j]['x'])>xdet['end']))
+                                        traj[j]['v']=traj[j]['v'][:len(traj[j]['v'])-acc_remove]
+                                        traj[j]['a']=traj[j]['a'][:len(traj[j]['a'])-acc_remove]
+                                        vfillList2=[]
+                                        afillList2=[]
                                     
                                     totalpoints=len(vfillList1)+len(traj[j]['v'])+len(vfillList2) # number of points in whole trajectory
                                     
@@ -689,7 +757,7 @@ for s in range(len(lsas)): # for each simulation
 #%%                                
                     time_id=time()-time_id0
                     print('Processed '+str(p)+' '+i+' '+d+' in %.fs' %time_id)
-                    f.savefig('TrajReconstruction-TestPlots/'+str(p)+str(i)+str(d)+'.png', bbox_inches='tight')
+                    f.savefig(figoutpath+'/'+str(p)+str(i)+str(d)+'.png', bbox_inches='tight')
                     plt.show()
                 direc_index+=1
             inter_index+=1

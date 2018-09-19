@@ -15,6 +15,9 @@ t_start=timeit.default_timer()
 
 #%% manual inputs
 mov = 'thru' # movements of interest: {'thru','all'}
+majorOnly=True 
+    # True: segments extend from major intersections to but not including minor intersections
+    # False: segments extend from major intersection to next/preceding major intersection, including minor intersections
 
 #%% get specs and properties
 
@@ -34,6 +37,8 @@ periods=runSpecs['periods']
 
 # get model specs
 modelSpecs=json.load(open('modelSpecs.json'))
+if majorOnly:
+    modelSpecs=json.load(open('modelSpecs-MajorOnly.json'))
 
 # specs for MOVES
 county=runSpecs['county']
